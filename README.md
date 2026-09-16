@@ -20,13 +20,13 @@ SaveShare est une application Windows et macOS qui partage vos sauvegardes entre
 
 ## Télécharger
 
-| Système | Installateur v0.5.0 |
+| Système | Installateur v0.5.1 |
 | --- | --- |
-| Windows x64 | [SaveShare pour Windows (.exe)](https://github.com/martineon/SaveShare/releases/download/v0.5.0/SaveShare-0.5.0-win-x64.exe) |
-| Mac Apple Silicon — M1, M2, M3… | [SaveShare pour Mac ARM64 (.dmg)](https://github.com/martineon/SaveShare/releases/download/v0.5.0/SaveShare-0.5.0-mac-arm64.dmg) |
-| Mac Intel | [SaveShare pour Mac Intel (.dmg)](https://github.com/martineon/SaveShare/releases/download/v0.5.0/SaveShare-0.5.0-mac-x64.dmg) |
+| Windows x64 | [SaveShare pour Windows (.exe)](https://github.com/martineon/SaveShare/releases/download/v0.5.1/SaveShare-0.5.1-win-x64.exe) |
+| Mac Apple Silicon — M1, M2, M3… | [SaveShare pour Mac ARM64 (.dmg)](https://github.com/martineon/SaveShare/releases/download/v0.5.1/SaveShare-0.5.1-mac-arm64.dmg) |
+| Mac Intel | [SaveShare pour Mac Intel (.dmg)](https://github.com/martineon/SaveShare/releases/download/v0.5.1/SaveShare-0.5.1-mac-x64.dmg) |
 
-Les installateurs sont disponibles dans les [releases GitHub](https://github.com/martineon/SaveShare/releases), avec leurs [empreintes SHA-256](https://github.com/martineon/SaveShare/releases/download/v0.5.0/SHA256SUMS.txt). Node.js n’est pas nécessaire pour utiliser l’application installée. Les exécutables ne sont pas signés/notariés ; Windows ou macOS peut afficher un avertissement ou en bloquer l’ouverture.
+Les installateurs sont disponibles dans les [releases GitHub](https://github.com/martineon/SaveShare/releases), avec leurs [empreintes SHA-256](https://github.com/martineon/SaveShare/releases/download/v0.5.1/SHA256SUMS.txt). Node.js n’est pas nécessaire pour utiliser l’application installée. Les exécutables ne sont pas signés/notariés ; Windows ou macOS peut afficher un avertissement ou en bloquer l’ouverture.
 
 **À essayer d’abord avec une copie de monde.** Depuis 0.3.0, SaveShare prend en charge le **dossier complet d’un monde Valheim 1.0**, ainsi que l’ancienne paire `<monde>.db` + `<monde>.fwl`. Les personnages et les autres jeux ne sont pas pris en charge ; la compatibilité des mods n’est pas garantie. Aucun serveur public n’est fourni avec le projet.
 
@@ -53,7 +53,7 @@ Une nouvelle version reçue déclenche une petite notification cliquable, une se
 
 ## Diagnostiquer un monde invisible dans Valheim
 
-À partir de **0.5.0**, cliquer **Diagnostiquer ce monde** à côté d’**Ouvrir**, puis **Copier le rapport**. Faire cette opération sur le PC du joueur concerné ; comparer éventuellement avec le rapport de l’hôte.
+À partir de **0.5.1**, cliquer **Diagnostiquer ce monde** à côté d’**Ouvrir**, puis **Copier le rapport**. Faire cette opération sur le PC du joueur concerné ; comparer éventuellement avec le rapport de l’hôte.
 
 Le diagnostic affiche les chemins exacts localement et distingue la version publiée, les contenus téléchargés dans le cache et les fichiers réellement présents dans le dossier du jeu. Il signale les dossiers imbriqués, les fichiers manquants/différents/supplémentaires et les blocages de synchronisation. En rejoignant un partage, sélectionner `worlds_local` : SaveShare ajoute lui-même le sous-dossier du monde.
 

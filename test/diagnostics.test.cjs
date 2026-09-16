@@ -98,9 +98,9 @@ test('report excludes secrets, names, custom path prefixes and arbitrary filenam
   r.error = `Authorization: Bearer ${w.key} saveshare:PRIVATE_CODE /Users/PrivateUsername`;
   await fs.writeFile(path.join(bFolder, 'PrivateWorld', 'PrivateUsername.txt'), 'private contents');
   const result = await run(b, wid);
-  for (const forbidden of [w.key, w.server, root, 'SecretDisplayName', 'PrivateWorld', 'PrivateAuthor', 'PrivateUsername', 'PRIVATE_CODE', 'private contents']) assert.equal(result.report.includes(forbidden), false, forbidden);
+  for (const forbidden of [w.key, w.server, root, await fs.realpath(root), 'SecretDisplayName', 'PrivateWorld', 'PrivateAuthor', 'PrivateUsername', 'PRIVATE_CODE', 'private contents']) assert.equal(result.report.includes(forbidden), false, forbidden);
   assert.match(result.report, /<autre fichier>/);
-  assert.ok(result.paths.configured.includes(root), 'only local UI keeps exact paths');
+  assert.equal(result.paths.configured, await fs.realpath(bFolder), 'only local UI keeps canonical paths, including Windows short-path expansion');
   assert.equal(sharedPath('C:\\Users\\PrivateUsername\\AppData\\LocalLow\\IronGate\\Valheim\\worlds_local\\PrivateWorld', 'PrivateWorld'), '<emplacement masqué>/worlds_local/<monde>');
   assert.equal(sharedPath('/Users/PrivateUsername/custom/PrivateWorld', 'PrivateWorld'), '<emplacement masqué>/<monde>');
 });

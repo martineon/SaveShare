@@ -121,6 +121,7 @@ const crypto = require('node:crypto');
     assert.equal(nativeDownloads[0].downloaded, true);
     assert.match(nativeDownloads[1].error, /checksum mismatch/i);
     await page.locator('#toast').evaluate(el => el.hidden = true);
+    await page.evaluate(() => window.scrollTo(0, 0));
     await page.screenshot({ path: path.join(__dirname, '../artifacts/desktop-world.png'), fullPage: true });
     assert.deepEqual(errors, []);
     console.log('Desktop smoke passed: world lifecycle, update guards, native update download and checksum rejection; no renderer errors.');
