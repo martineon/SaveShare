@@ -20,13 +20,13 @@ SaveShare est une application Windows et macOS qui partage vos sauvegardes entre
 
 ## Télécharger
 
-| Système | Installateur v0.3.0 |
+| Système | Installateur v0.4.0 |
 | --- | --- |
-| Windows x64 | [SaveShare pour Windows (.exe)](https://github.com/martineon/SaveShare/releases/download/v0.3.0/SaveShare-0.3.0-win-x64.exe) |
-| Mac Apple Silicon — M1, M2, M3… | [SaveShare pour Mac ARM64 (.dmg)](https://github.com/martineon/SaveShare/releases/download/v0.3.0/SaveShare-0.3.0-mac-arm64.dmg) |
-| Mac Intel | [SaveShare pour Mac Intel (.dmg)](https://github.com/martineon/SaveShare/releases/download/v0.3.0/SaveShare-0.3.0-mac-x64.dmg) |
+| Windows x64 | [SaveShare pour Windows (.exe)](https://github.com/martineon/SaveShare/releases/download/v0.4.0/SaveShare-0.4.0-win-x64.exe) |
+| Mac Apple Silicon — M1, M2, M3… | [SaveShare pour Mac ARM64 (.dmg)](https://github.com/martineon/SaveShare/releases/download/v0.4.0/SaveShare-0.4.0-mac-arm64.dmg) |
+| Mac Intel | [SaveShare pour Mac Intel (.dmg)](https://github.com/martineon/SaveShare/releases/download/v0.4.0/SaveShare-0.4.0-mac-x64.dmg) |
 
-Les installateurs sont disponibles dans les [releases GitHub](https://github.com/martineon/SaveShare/releases), avec leurs [empreintes SHA-256](https://github.com/martineon/SaveShare/releases/download/v0.3.0/SHA256SUMS.txt). Node.js n’est pas nécessaire pour utiliser l’application installée. Les exécutables ne sont pas signés/notariés ; Windows ou macOS peut afficher un avertissement ou en bloquer l’ouverture.
+Les installateurs sont disponibles dans les [releases GitHub](https://github.com/martineon/SaveShare/releases), avec leurs [empreintes SHA-256](https://github.com/martineon/SaveShare/releases/download/v0.4.0/SHA256SUMS.txt). Node.js n’est pas nécessaire pour utiliser l’application installée. Les exécutables ne sont pas signés/notariés ; Windows ou macOS peut afficher un avertissement ou en bloquer l’ouverture.
 
 **À essayer d’abord avec une copie de monde.** Depuis 0.3.0, SaveShare prend en charge le **dossier complet d’un monde Valheim 1.0**, ainsi que l’ancienne paire `<monde>.db` + `<monde>.fwl`. Les personnages et les autres jeux ne sont pas pris en charge ; la compatibilité des mods n’est pas garantie. Aucun serveur public n’est fourni avec le projet.
 
@@ -38,6 +38,18 @@ Les installateurs sont disponibles dans les [releases GitHub](https://github.com
 - **Mac** : détection des nouvelles versions et bouton **Ouvrir le téléchargement**, puis remplacement manuel de l’application. L’installation automatique macOS exige une signature de distribution Apple, qui n’est pas configurée pour ce projet.
 
 **Depuis 0.1.0, installez la dernière version manuellement une première fois.** Les mondes connectés, les clés et les copies de secours sont conservés dans le dossier de données utilisateur. Aucune clé d’administration du serveur ni aucun token GitHub n’est nécessaire pour télécharger les mises à jour. Le mode développement (`npm start`) ne contacte pas le serveur de mises à jour.
+
+## Démarrage et notifications
+
+Depuis **0.4.0**, **Ouvrir au démarrage** inscrit l’application installée à l’ouverture de votre session Windows/macOS lors de son premier lancement. Le réglage est modifiable dans la barre latérale. Les changements effectués ensuite dans le système sont respectés. Le mode développement ne modifie jamais les éléments de démarrage.
+
+Sur Mac, placer SaveShare dans **Applications**. L’[API de démarrage Electron](https://www.electronjs.org/docs/latest/api/app#appsetloginitemsettingssettings-macos-windows) peut échouer avec une application non signée/notariée : si l’interface indique que macOS n’a pas confirmé l’activation, ajouter manuellement SaveShare dans **Réglages Système → Général → Ouverture**. Une approbation système peut aussi être nécessaire.
+
+Au lancement, chaque monde connecté est vérifié. La dernière version est téléchargée et, si la réception automatique est activée, appliquée avec les protections habituelles. Si Valheim tourne, SaveShare attend sa fermeture. En cas de modification locale, il avertit sans écraser la progression. Sans réseau, il réessaie lors des vérifications suivantes. Aucune session d’écriture n’est prise automatiquement.
+
+Une nouvelle version reçue déclenche une petite notification cliquable, une seule fois par version pendant l’exécution de SaveShare. Windows utilise les notifications système (selon leurs autorisations). Sur Mac, une petite fenêtre SaveShare de dix secondes est utilisée : les [notifications natives Electron](https://www.electronjs.org/docs/latest/tutorial/notifications) nécessitent une signature. Un message apparaît également dans l’application. **Quitter SaveShare arrête la synchronisation et les notifications** ; réduire sa fenêtre la laisse fonctionner.
+
+![Notification SaveShare cliquable annonçant une nouvelle sauvegarde.](docs/screenshots/world-notification.png)
 
 ## Lancer depuis les sources
 
@@ -96,7 +108,7 @@ PowerShell : `$env:SAVESHARE_ADMIN_TOKEN = 'votre-cle-aleatoire-de-32-caracteres
 2. L’hôte crée le partage et choisit **le dossier portant le nom du monde**, à l’intérieur de `worlds_local` (pas `worlds_local` lui-même). Pour une sauvegarde antérieure à 1.0, utiliser **Ancien format : sélectionner un .fwl** ; le `.db` du même nom doit exister à côté.
 3. Cliquer **Prendre la session**, puis lancer le monde dans Valheim. La première version est envoyée immédiatement. Ensuite, les changements stabilisés depuis au moins dix secondes sont détectés toutes les quinze secondes.
 4. Copier l’invitation et la transmettre aux amis. Ils rejoignent le partage en sélectionnant leur dossier `worlds_local`, puis cliquent **Récupérer**, jeu fermé.
-5. Les nouveaux fichiers sont téléchargés automatiquement dans le cache lorsque SaveShare est ouvert. Pour les appliquer directement dans le dossier du jeu, chaque ami active **Appliquer automatiquement les versions reçues**. Cette autorisation est désactivée à chaque redémarrage et à la prise de session.
+5. Les nouveaux fichiers sont téléchargés dès l’ouverture puis toutes les quinze secondes lorsque SaveShare est ouvert. **Appliquer automatiquement les versions reçues** est activé par défaut en 0.4.0 et son réglage est mémorisé par monde. Les fichiers ne sont remplacés que jeu fermé, hors session et sans progression locale non publiée. Désactiver cette option conserve le téléchargement dans le cache, avec application manuelle par **Récupérer**.
 6. Avant de passer le relais : sauvegarder, quitter Valheim, puis **Terminer ma session**. La dernière sauvegarde est publiée avant de libérer le verrou. Un autre ami peut prendre la session, même pour jouer seul.
 
 Le bouton **Prendre la session** récupère la dernière version avant d’autoriser le relais. En cas de différence locale non publiée, il bloque : **Récupérer** conserve ces fichiers dans une copie de secours avant de remplacer le monde. Le bouton **Copie de secours** ouvre la dernière copie. Les copies précédentes restent dans `backups/` du dossier de données de l’application.

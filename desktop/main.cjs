@@ -1,12 +1,15 @@
-const { app, BrowserWindow, ipcMain, dialog, clipboard, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, clipboard, shell, Notification, screen } = require('electron');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
 const { Client } = require('./client.cjs');
 const { Updates, installBlockReason } = require('./updates.cjs');
+const { Startup } = require('./startup.cjs');
+const { WorldNotifications } = require('./notifications.cjs');
+const { createWorldPopup } = require('./world-popup.cjs');
 const run = promisify(execFile);
-let win, client, updates, closing = false, installingUpdate = false;
+let win, client, updates, startup, notifications, closing = false, installingUpdate = false;
 const selectedFolders = new Set();
 const page = path.join(__dirname, '../ui/index.html');
 async function isGameRunning() {
@@ -18,7 +21,7 @@ async function isGameRunning() {
   const { stdout } = await run('/bin/ps', ['-axo', 'comm='], { timeout: 5000 });
   return stdout.split('\n').some(line => /^(valheim|valheim_server)(?:\.exe)?$/i.test(path.basename(line.trim())));
 }
-function state() { return { ...client.state(), update: updates?.state() }; }
+function state() { return { ...client.state(), update: updates?.state(), startup: startup?.state(), notificationStatus: notifications?.status }; }
 function notify() { if (win && !win.isDestroyed()) win.webContents.send('state', state()); }
 function handle(name, fn) {
   ipcMain.handle(name, async (event, ...args) => {
@@ -31,7 +34,17 @@ if (!app.requestSingleInstanceLock()) app.quit();
 else {
   app.on('second-instance', () => { win?.show(); win?.focus(); });
   app.whenReady().then(async () => {
-    client = await new Client({ dataDir: process.env.SAVESHARE_TEST_DATA || app.getPath('userData'), isGameRunning, onChange: notify }).init();
+    if (process.platform === 'win32') app.setAppUserModelId('app.saveshare.desktop');
+    const openWorld = worldId => {
+      if (!win || win.isDestroyed()) return;
+      if (win.isMinimized()) win.restore(); win.show(); win.focus();
+      win.webContents.send('select-world', worldId);
+    };
+    notifications = new WorldNotifications({ Notification, enabled: app.isPackaged && process.env.SAVESHARE_TEST_MODE !== '1', nativeEnabled: process.platform === 'win32', open: openWorld, fallback: createWorldPopup({ BrowserWindow, screen, open: openWorld }), onChange: notify, announce: data => { if (win && !win.isDestroyed()) win.webContents.send('world-notification', data); } });
+    client = await new Client({ dataDir: process.env.SAVESHARE_TEST_DATA || app.getPath('userData'), isGameRunning, onChange: notify, onNewVersion: data => notifications.show(data) }).init();
+    startup = new Startup({ app, platform: process.platform, execPath: process.execPath, config: client.config, save: () => client.save() });
+    await startup.init();
+    handle('set-startup', enabled => client.exclusive(() => startup.set(enabled)));
     updates = new Updates({ updater: require('electron-updater').autoUpdater, version: app.getVersion(), packaged: app.isPackaged, platform: process.platform, openExternal: url => shell.openExternal(url), onChange: () => {
       if (installingUpdate && !updates.installing) { installingUpdate = false; closing = false; }
       notify();
@@ -75,10 +88,10 @@ else {
       if (action === 'auto') {
         if (r.session) throw new Error('Terminez la session avant d’activer la réception.');
         if (!r.autoApply) {
-          const result = await dialog.showMessageBox(win, { type: 'question', message: 'Autoriser l’application des sauvegardes reçues ?', detail: 'Gardez Valheim fermé sur ce PC. Prenez la session dans SaveShare avant de lancer votre propre monde. Les fichiers locaux modifiés ne seront jamais remplacés automatiquement.', buttons: ['Annuler', 'Autoriser'], defaultId: 0, cancelId: 0 });
+          const result = await dialog.showMessageBox(win, { type: 'question', message: 'Autoriser l’application des sauvegardes reçues ?', detail: 'Ce réglage reste activé au redémarrage. Les versions reçues sont appliquées uniquement jeu fermé, hors session et sans modifications locales. Prenez la session dans SaveShare avant de lancer votre monde.', buttons: ['Annuler', 'Autoriser'], defaultId: 0, cancelId: 0 });
           if (result.response !== 1) return;
         }
-        r.autoApply = !r.autoApply; return;
+        await client.setAutoApply(wid, !r.autoApply); return;
       }
       if (action === 'invite') { clipboard.writeText(client.invitation(wid)); return 'Invitation copiée. Elle donne accès en lecture et écriture à ce monde.'; }
       if (action === 'folder' || action === 'backup') {

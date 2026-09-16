@@ -25,22 +25,33 @@ async function plainFile(filename) {
   return stat;
 }
 class Client {
-  constructor({ dataDir, isGameRunning = async () => false, onChange = () => {} }) {
+  constructor({ dataDir, isGameRunning = async () => false, onChange = () => {}, onNewVersion = () => {} }) {
     this.dir = dataDir; this.isGameRunning = isGameRunning; this.onChange = onChange;
+    this.onNewVersion = onNewVersion;
     this.runtime = new Map(); this.busy = false; this.renewing = false;
   }
   async init() {
     await fs.mkdir(this.dir, { recursive: true });
     this.config = await readJSON(path.join(this.dir, 'config.json')).catch(e => { if (e.code === 'ENOENT') return { clientId: id(), author: os.userInfo().username, worlds: [] }; throw e; });
-    // No automatic filesystem replacement is enabled after a restart.
-    for (const w of this.config.worlds) await this.recover(w);
+    for (const w of this.config.worlds) {
+      try { await this.recover(w); } catch (e) { this.stateFor(w).error = e.message; }
+    }
     return this;
   }
   stateFor(w) {
-    if (!this.runtime.has(w.id)) this.runtime.set(w.id, { autoApply: false, session: null, remote: null, error: null, status: 'En attente' });
+    if (!this.runtime.has(w.id)) this.runtime.set(w.id, { autoApply: w.autoApply !== false, session: null, remote: null, error: null, status: 'En attente' });
     return this.runtime.get(w.id);
   }
   async save() { await atomicJSON(path.join(this.dir, 'config.json'), this.config); }
+  async setAutoApply(wid, enabled) {
+    if (typeof enabled !== 'boolean') fail('Réglage de réception invalide.');
+    const w = this.get(wid), r = this.stateFor(w);
+    if (r.session) fail('Terminez la session avant de modifier la réception.');
+    const previous = w.autoApply;
+    w.autoApply = enabled;
+    try { await this.save(); } catch (e) { w.autoApply = previous; throw e; }
+    r.autoApply = enabled;
+  }
   state() {
     return { author: this.config.author, busy: this.busy, worlds: this.config.worlds.map(w => {
       const r = this.stateFor(w); return { id: w.id, name: w.name, fileStem: w.fileStem, server: w.server, folder: w.folder, base: w.base, autoApply: r.autoApply, active: !!r.session, status: r.status, error: r.error, remote: r.remote, backup: w.backup || null };
@@ -201,7 +212,7 @@ class Client {
     const w = this.get(wid), r = this.stateFor(w);
     if (r.session) return;
     if (await this.isGameRunning()) fail('Fermez Valheim avant de prendre la session et récupérer le monde à jour.');
-    r.autoApply = false;
+    await this.recover(w);
     const lease = await (await this.api(w, '/lease', 'PUT', { clientId: this.config.clientId, author: this.config.author })).json();
     r.session = lease;
     try {
@@ -279,12 +290,21 @@ class Client {
       for (const w of this.config.worlds) {
         const r = this.stateFor(w);
         try {
+          await this.recover(w);
           const remote = await this.info(w);
           if (r.session) { await this.publish(w.id, 'Sauvegarde automatique', true); continue; }
           if (remote.head && remote.head !== w.base) {
             await this.cache(w, remote.versions[0]);
-            r.status = 'Nouvelle version téléchargée';
-            if (r.autoApply && !(await this.isGameRunning())) { await this.apply(w, remote.versions[0]); r.status = 'À jour sur cet ordinateur'; }
+            if (r.notifiedHead !== remote.head) {
+              // Notifications must never block synchronization or repeat every 15 seconds.
+              r.notifiedHead = remote.head;
+              try { this.onNewVersion({ worldId: w.id, name: w.name, versionId: remote.head }); } catch {}
+            }
+            r.status = 'Nouvelle version téléchargée · application automatique désactivée';
+            if (r.autoApply) {
+              if (await this.isGameRunning()) r.status = 'Nouvelle version téléchargée · en attente de fermeture de Valheim';
+              else { await this.apply(w, remote.versions[0]); r.status = 'À jour sur cet ordinateur'; }
+            }
           } else {
             r.status = remote.head ? 'À jour sur cet ordinateur' : 'Prêt pour la première session';
             if (w.files && !sameFiles(await this.scan(w, { allowMissing: true }), w.files)) fail('Des modifications locales ne sont pas encore publiées. Prenez la session pour les partager, ou récupérez la version du groupe.');

@@ -14,6 +14,7 @@
     <div class="world-list" id="world-list"></div>
     <button class="nav add-nav" id="add-nav"><span>＋</span> Ajouter un monde</button>
     <div class="update-panel" aria-live="polite"><span id="app-version">SaveShare</span><p id="update-status">Mises à jour de l’application</p><button id="check-updates" class="quiet">Vérifier les mises à jour</button><button id="apply-update" class="primary" hidden></button></div>
+    <div class="startup-panel"><label><input type="checkbox" id="launch-at-login"> Ouvrir au démarrage</label><p id="startup-status" aria-live="polite"></p><p id="notification-status"></p></div>
     <div class="sidebar-bottom"><span class="avatar" id="avatar">V</span><div id="profile">Viking<small>Sur cet ordinateur</small></div><span class="online-dot"></span></div>
   </aside>
   <main>
@@ -38,5 +39,6 @@
   <div id="toast" role="status" hidden></div>
   <script src="app.js"></script>
   <script src="updates.js"></script>
+  <script src="startup.js"></script>
 </body>
 </html>

@@ -97,14 +97,17 @@ test('lease expiry and server restart preserve exclusive ownership', async t => 
     const world = await response.json(); assert.equal(world.head, persisted.head);
   } finally { second.closeAllConnections(); await new Promise(resolve => second.close(resolve)); }
 });
-test('game running blocks replacements; restart disables automatic apply', async t => {
+test('game running blocks replacements; restart preserves automatic apply preference', async t => {
   const { a, b, wid, root } = await fixture(t); await a.start(wid); await a.finish(wid);
   b.isGameRunning = async () => true;
   await assert.rejects(b.pull(wid, true), /Fermez Valheim/);
   await assert.rejects(b.start(wid), /Fermez Valheim/);
-  b.stateFor(b.get(wid)).autoApply = true;
+  await b.setAutoApply(wid, false);
   const restarted = await new Client({ dataDir: path.join(root, 'b') }).init();
   assert.equal(restarted.stateFor(restarted.get(wid)).autoApply, false);
+  await restarted.setAutoApply(wid, true);
+  const again = await new Client({ dataDir: path.join(root, 'b') }).init();
+  assert.equal(again.stateFor(again.get(wid)).autoApply, true);
 });
 test('interrupted two-file apply rolls back both files from journal', async t => {
   const { a, wid, root, folderA } = await fixture(t); await a.start(wid); await a.finish(wid);
@@ -299,4 +302,46 @@ test('missing converted folder never silently publishes the stale legacy pair', 
   await fs.rename(path.join(folderA, 'Midgard'), path.join(folderA, 'MovedWorld'));
   await assert.rejects(a.publish(wid), /dossier du monde a disparu/);
   assert.equal(a.get(wid).base, original);
+});
+
+test('startup downloads and applies latest world, notifies once, and retries after game closes', async t => {
+  const { a, b, wid, root, folderB } = await fixture(t, { format: 'folder' });
+  await a.start(wid); await a.finish(wid);
+  const notices = []; let playing = true;
+  const restarted = await new Client({ dataDir: path.join(root, 'b'), isGameRunning: async () => playing, onNewVersion: n => notices.push(n) }).init();
+  await restarted.tick();
+  assert.equal(notices.length, 1); assert.equal(notices[0].worldId, wid);
+  assert.match(restarted.stateFor(restarted.get(wid)).status, /attente de fermeture/);
+  assert.equal(restarted.get(wid).base, null);
+  await assert.rejects(fs.stat(path.join(folderB, 'Midgard')), { code: 'ENOENT' });
+  for (const f of a.get(wid).files) await fs.stat(path.join(root, 'b', 'cache', f.hash));
+  await restarted.tick(); assert.equal(notices.length, 1);
+  playing = false; await restarted.tick();
+  assert.equal(restarted.get(wid).base, a.get(wid).base);
+  assert.equal(await fs.readFile(path.join(folderB, 'Midgard', '_main.1.db2'), 'utf8'), 'world 1');
+  await restarted.start(wid); await restarted.finish(wid);
+  assert.equal(restarted.stateFor(restarted.get(wid)).autoApply, true);
+  assert.equal(notices.length, 1, 'no notification for own publications');
+});
+
+test('disabled auto apply still downloads and notifies; notification errors cannot block sync', async t => {
+  const { a, b, wid, root } = await fixture(t);
+  await b.setAutoApply(wid, false); await a.start(wid); await a.finish(wid);
+  const restarted = await new Client({ dataDir: path.join(root, 'b'), onNewVersion: () => { throw Error('notifications unavailable'); } }).init();
+  await restarted.tick();
+  assert.equal(restarted.get(wid).base, null); assert.equal(restarted.stateFor(restarted.get(wid)).error, null);
+  await restarted.setAutoApply(wid, true); await restarted.tick();
+  assert.equal(restarted.get(wid).base, a.get(wid).base);
+});
+
+test('startup dirty local progress is preserved even when a newer version is received', async t => {
+  const { a, b, wid, root, folderA, folderB } = await fixture(t);
+  await a.start(wid); await a.finish(wid); await b.pull(wid);
+  await fs.writeFile(path.join(folderB, 'Midgard.db'), 'unpublished progress');
+  await a.start(wid); await fs.writeFile(path.join(folderA, 'Midgard.db'), 'remote progress'); await a.finish(wid);
+  const notices = [];
+  const restarted = await new Client({ dataDir: path.join(root, 'b'), onNewVersion: n => notices.push(n) }).init();
+  await restarted.tick(); await restarted.tick();
+  assert.equal(notices.length, 1); assert.match(restarted.stateFor(restarted.get(wid)).error, /Progression locale différente/);
+  assert.equal(await fs.readFile(path.join(folderB, 'Midgard.db'), 'utf8'), 'unpublished progress');
 });
