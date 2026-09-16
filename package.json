@@ -1,0 +1,51 @@
+{
+  "name": "saveshare",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Vos mondes Valheim, toujours entre de bonnes mains.",
+  "author": "SaveShare",
+  "license": "UNLICENSED",
+  "main": "desktop/main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "server": "node server/index.cjs",
+    "test": "node --test test/*.test.cjs",
+    "test:desktop": "node test/desktop.smoke.cjs",
+    "dist:mac": "electron-builder --mac --publish never",
+    "dist:win": "electron-builder --win --publish never"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "electron": "44.4.1",
+    "electron-builder": "26.15.3"
+  },
+  "build": {
+    "appId": "app.saveshare.desktop",
+    "productName": "SaveShare",
+    "files": [
+      "desktop/**/*",
+      "shared/**/*",
+      "ui/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.games"
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "directories": {
+      "output": "dist"
+    }
+  }
+}

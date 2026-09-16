@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; frame-src 'none'">
+  <title>SaveShare</title><link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="titlebar"></div>
+  <aside>
+    <div class="brand"><span class="brandmark">S<span>↗</span></span><span>SaveShare<small>LA SUITE DE L’AVENTURE.</small></span></div>
+    <div class="nav-label">ESPACE DE JEU</div>
+    <button class="nav active" id="worlds-nav"><span>▦</span> Mes mondes <span id="count" class="count">0</span></button>
+    <div class="world-list" id="world-list"></div>
+    <button class="nav add-nav" id="add-nav"><span>＋</span> Ajouter un monde</button>
+    <div class="sidebar-bottom"><span class="avatar" id="avatar">V</span><div id="profile">Viking<small>Sur cet ordinateur</small></div><span class="online-dot"></span></div>
+  </aside>
+  <main>
+    <header><div class="breadcrumb">Mon espace <span>/</span> Mes mondes</div><button class="quiet" id="refresh">↻ <span>Actualiser</span></button></header>
+    <section id="content"></section>
+    <footer><span><i class="online-dot"></i> SaveShare · aperçu 0.1</span><span>Un monde partagé. Toutes vos aventures.</span></footer>
+  </main>
+  <dialog id="setup">
+    <form id="setup-form">
+      <div class="dialog-heading"><div><div class="eyebrow">ON CONTINUE ENSEMBLE</div><h2>Ajouter un monde</h2></div><button type="button" class="icon-button" id="close-dialog" aria-label="Fermer">×</button></div>
+      <div class="tabs"><button type="button" class="selected" id="tab-create">Créer le partage</button><button type="button" id="tab-join">Rejoindre des amis</button></div>
+      <label>Votre pseudo<input id="author" required maxlength="60" placeholder="Votre nom de Viking"></label>
+      <div id="create-fields"><label>Serveur SaveShare<input id="server" type="url" placeholder="https://saves.example.fr"></label><label>Clé administrateur du serveur<input id="admin-token" type="password" autocomplete="off" placeholder="Fournie lors de l’installation du serveur"></label><label>Nom du partage<input id="name" maxlength="80" placeholder="Les Vikings du dimanche"></label></div>
+      <div id="join-fields" hidden><label>Code d’invitation<textarea id="invite" rows="3" placeholder="saveshare:…" spellcheck="false"></textarea></label></div>
+      <label id="folder-label">Monde Valheim local</label><button type="button" class="folder-picker" id="choose-folder">⌁ <span id="folder-value">Choisir le fichier .fwl du monde</span><span>Parcourir →</span></button>
+      <div class="notice">Dans Valheim, utilisez une sauvegarde <strong>locale</strong> et fermez le jeu. Cette version synchronise uniquement la paire <strong>.db + .fwl</strong> du monde choisi, sans toucher aux personnages ni aux autres mondes.</div>
+      <p id="form-error" class="error-text" role="alert"></p>
+      <button class="primary full" id="submit-world">Créer le partage <span>→</span></button>
+    </form>
+  </dialog>
+  <div id="toast" role="status" hidden></div>
+  <script src="app.js"></script>
+</body>
+</html>

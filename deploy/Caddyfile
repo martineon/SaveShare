@@ -1,0 +1,3 @@
+{$SAVESHARE_DOMAIN} {
+    reverse_proxy saveshare:8787
+}

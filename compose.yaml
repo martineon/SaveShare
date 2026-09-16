@@ -1,0 +1,30 @@
+services:
+  saveshare:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+    restart: unless-stopped
+    environment:
+      SAVESHARE_ADMIN_TOKEN: ${SAVESHARE_ADMIN_TOKEN:?Configurez SAVESHARE_ADMIN_TOKEN dans .env}
+    volumes:
+      - saves:/data
+    expose:
+      - "8787"
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      SAVESHARE_DOMAIN: ${SAVESHARE_DOMAIN:?Configurez SAVESHARE_DOMAIN dans .env}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - certificates:/data
+      - caddy_config:/config
+    depends_on:
+      - saveshare
+volumes:
+  saves:
+  certificates:
+  caddy_config:
