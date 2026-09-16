@@ -8,9 +8,11 @@ const { Updates, installBlockReason } = require('./updates.cjs');
 const { Startup } = require('./startup.cjs');
 const { WorldNotifications } = require('./notifications.cjs');
 const { createWorldPopup } = require('./world-popup.cjs');
+const { diagnose } = require('./diagnostics.cjs');
 const run = promisify(execFile);
 let win, client, updates, startup, notifications, closing = false, installingUpdate = false;
 const selectedFolders = new Set();
+const diagnosticReports = new Map();
 const page = path.join(__dirname, '../ui/index.html');
 async function isGameRunning() {
   if (process.env.SAVESHARE_TEST_MODE === '1') return false;
@@ -50,6 +52,17 @@ else {
       notify();
     } });
     handle('state', state);
+    handle('diagnose-world', wid => client.exclusive(async () => {
+      diagnosticReports.delete(wid);
+      const result = await diagnose(client, wid, { version: app.getVersion(), home: app.getPath('home') });
+      diagnosticReports.set(wid, result.report); return result;
+    }));
+    handle('copy-diagnostic', wid => {
+      client.get(wid);
+      const report = diagnosticReports.get(wid);
+      if (!report) throw new Error('Lancez le diagnostic avant de copier le rapport.');
+      clipboard.writeText(report); return 'Rapport masqué copié. Vous pouvez le partager.';
+    });
     handle('check-updates', () => updates.check());
     handle('open-update', () => updates.openDownload());
     handle('install-update', async () => {

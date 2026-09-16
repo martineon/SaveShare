@@ -20,13 +20,13 @@ SaveShare est une application Windows et macOS qui partage vos sauvegardes entre
 
 ## Télécharger
 
-| Système | Installateur v0.4.0 |
+| Système | Installateur v0.5.0 |
 | --- | --- |
-| Windows x64 | [SaveShare pour Windows (.exe)](https://github.com/martineon/SaveShare/releases/download/v0.4.0/SaveShare-0.4.0-win-x64.exe) |
-| Mac Apple Silicon — M1, M2, M3… | [SaveShare pour Mac ARM64 (.dmg)](https://github.com/martineon/SaveShare/releases/download/v0.4.0/SaveShare-0.4.0-mac-arm64.dmg) |
-| Mac Intel | [SaveShare pour Mac Intel (.dmg)](https://github.com/martineon/SaveShare/releases/download/v0.4.0/SaveShare-0.4.0-mac-x64.dmg) |
+| Windows x64 | [SaveShare pour Windows (.exe)](https://github.com/martineon/SaveShare/releases/download/v0.5.0/SaveShare-0.5.0-win-x64.exe) |
+| Mac Apple Silicon — M1, M2, M3… | [SaveShare pour Mac ARM64 (.dmg)](https://github.com/martineon/SaveShare/releases/download/v0.5.0/SaveShare-0.5.0-mac-arm64.dmg) |
+| Mac Intel | [SaveShare pour Mac Intel (.dmg)](https://github.com/martineon/SaveShare/releases/download/v0.5.0/SaveShare-0.5.0-mac-x64.dmg) |
 
-Les installateurs sont disponibles dans les [releases GitHub](https://github.com/martineon/SaveShare/releases), avec leurs [empreintes SHA-256](https://github.com/martineon/SaveShare/releases/download/v0.4.0/SHA256SUMS.txt). Node.js n’est pas nécessaire pour utiliser l’application installée. Les exécutables ne sont pas signés/notariés ; Windows ou macOS peut afficher un avertissement ou en bloquer l’ouverture.
+Les installateurs sont disponibles dans les [releases GitHub](https://github.com/martineon/SaveShare/releases), avec leurs [empreintes SHA-256](https://github.com/martineon/SaveShare/releases/download/v0.5.0/SHA256SUMS.txt). Node.js n’est pas nécessaire pour utiliser l’application installée. Les exécutables ne sont pas signés/notariés ; Windows ou macOS peut afficher un avertissement ou en bloquer l’ouverture.
 
 **À essayer d’abord avec une copie de monde.** Depuis 0.3.0, SaveShare prend en charge le **dossier complet d’un monde Valheim 1.0**, ainsi que l’ancienne paire `<monde>.db` + `<monde>.fwl`. Les personnages et les autres jeux ne sont pas pris en charge ; la compatibilité des mods n’est pas garantie. Aucun serveur public n’est fourni avec le projet.
 
@@ -50,6 +50,18 @@ Au lancement, chaque monde connecté est vérifié. La dernière version est té
 Une nouvelle version reçue déclenche une petite notification cliquable, une seule fois par version pendant l’exécution de SaveShare. Windows utilise les notifications système (selon leurs autorisations). Sur Mac, une petite fenêtre SaveShare de dix secondes est utilisée : les [notifications natives Electron](https://www.electronjs.org/docs/latest/tutorial/notifications) nécessitent une signature. Un message apparaît également dans l’application. **Quitter SaveShare arrête la synchronisation et les notifications** ; réduire sa fenêtre la laisse fonctionner.
 
 ![Notification SaveShare cliquable annonçant une nouvelle sauvegarde.](docs/screenshots/world-notification.png)
+
+## Diagnostiquer un monde invisible dans Valheim
+
+À partir de **0.5.0**, cliquer **Diagnostiquer ce monde** à côté d’**Ouvrir**, puis **Copier le rapport**. Faire cette opération sur le PC du joueur concerné ; comparer éventuellement avec le rapport de l’hôte.
+
+Le diagnostic affiche les chemins exacts localement et distingue la version publiée, les contenus téléchargés dans le cache et les fichiers réellement présents dans le dossier du jeu. Il signale les dossiers imbriqués, les fichiers manquants/différents/supplémentaires et les blocages de synchronisation. En rejoignant un partage, sélectionner `worlds_local` : SaveShare ajoute lui-même le sous-dossier du monde.
+
+**Aucune réparation automatique** : le diagnostic ne télécharge, ne déplace et ne remplace rien. Il effectue seulement des lectures locales et une requête GET authentifiée au serveur. Les permissions sont indicatives (pas d’écriture de test). La lecture des empreintes est plafonnée à 512 Mio et environ 30 secondes ; un résultat partiel n’est jamais présenté comme une vérification complète. La synchronisation habituelle peut reprendre après le diagnostic : utiliser **Revérifier** si l’état a changé.
+
+Le rapport copié exclut les clés, invitations, pseudos, adresse du serveur, nom du monde et préfixes de chemins. Les identifiants de monde/version sont conservés pour comparer les deux rapports ; les noms de fichiers Valheim standards restent visibles. Les chemins complets affichés dans la fenêtre ne sont pas destinés à être partagés en capture sans vérification.
+
+**Fichiers conformes ne signifie pas monde chargé par Valheim** : le jeu peut lire un autre dossier ou refuser le format. Le diagnostic n’analyse pas les fichiers binaires du jeu et ne détecte pas automatiquement la boutique ou la version de Valheim. En cas de doute, fournir ces deux informations avec le rapport, sans envoyer de code d’invitation.
 
 ## Lancer depuis les sources
 

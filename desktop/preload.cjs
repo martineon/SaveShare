@@ -8,6 +8,8 @@ contextBridge.exposeInMainWorld('saveShare', {
   add: input => ipcRenderer.invoke('add', input),
   action: (world, action, version) => ipcRenderer.invoke('action', world, action, version),
   refresh: () => ipcRenderer.invoke('refresh'),
+  diagnoseWorld: world => ipcRenderer.invoke('diagnose-world', world),
+  copyDiagnostic: world => ipcRenderer.invoke('copy-diagnostic', world),
   checkUpdates: () => ipcRenderer.invoke('check-updates'),
   openUpdate: () => ipcRenderer.invoke('open-update'),
   installUpdate: () => ipcRenderer.invoke('install-update'),

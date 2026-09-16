@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; frame-src 'none'">
-  <title>SaveShare</title><link rel="stylesheet" href="style.css"><link rel="stylesheet" href="updates.css">
+  <title>SaveShare</title><link rel="stylesheet" href="style.css"><link rel="stylesheet" href="updates.css"><link rel="stylesheet" href="diagnostics.css">
 </head>
 <body>
   <div class="titlebar"></div>
@@ -36,9 +36,21 @@
       <button class="primary full" id="submit-world">Créer le partage <span>→</span></button>
     </form>
   </dialog>
+  <dialog id="diagnostics" aria-labelledby="diagnostic-title">
+    <div class="dialog-heading"><div><div class="eyebrow">LECTURE SEULE · AUCUNE RÉPARATION</div><h2 id="diagnostic-title">Diagnostic du monde</h2></div><button type="button" class="icon-button" id="close-diagnostic" aria-label="Fermer le diagnostic">×</button></div>
+    <p id="diagnostic-progress" role="status"></p>
+    <div id="diagnostic-result" hidden>
+      <p class="notice">Les chemins complets ci-dessous sont visibles uniquement sur cet ordinateur. Le rapport à copier masque leurs préfixes, le nom du monde et les informations personnelles. Aucun secret d’invitation n’est inclus.</p>
+      <dl id="diagnostic-paths"></dl>
+      <div id="diagnostic-checks"></div>
+      <details><summary>Aperçu du rapport à partager</summary><pre id="diagnostic-report"></pre></details>
+    </div>
+    <div class="diagnostic-actions"><button id="rerun-diagnostic">Revérifier</button><button class="primary" id="copy-diagnostic" disabled>Copier le rapport</button></div>
+  </dialog>
   <div id="toast" role="status" hidden></div>
   <script src="app.js"></script>
   <script src="updates.js"></script>
   <script src="startup.js"></script>
+  <script src="diagnostics.js"></script>
 </body>
 </html>
