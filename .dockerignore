@@ -1,0 +1,7 @@
+**
+!server/
+!server/**
+!shared/
+!shared/**
+!deploy/
+!deploy/Dockerfile

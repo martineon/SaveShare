@@ -62,6 +62,12 @@ Prévoir un VPS avec Docker Compose, un nom de domaine pointant vers son IP et l
 
 Caddy termine HTTPS et gère les certificats. Le port interne 8787 n’est pas publié. Le volume Docker `saves` conserve les données ; sauvegarder ce volume indépendamment. Ne pas lancer plusieurs instances serveur sur le même stockage : les transactions sont sérialisées dans un seul processus.
 
+### VPS avec nginx déjà installé
+
+Utiliser `docker compose -p saveshare -f compose.vps.yaml up -d --build` à la place du compose principal. Cette variante n’installe pas Caddy : elle expose l’API uniquement sur `127.0.0.1:8787`, stocke les données dans le volume `saveshare-data` et ajoute un contrôle de santé. La clé administrateur doit être définie dans le fichier `.env` du serveur (permissions `600`).
+
+Le fichier `deploy/nginx.conf` fournit le proxy HTTP pour `saveshare.martineon.com` ; adapter le domaine pour une autre installation. Après avoir pointé le DNS vers le VPS, installer ce site nginx, vérifier `nginx -t`, recharger nginx et utiliser Certbot pour activer HTTPS. Ne pas ouvrir le port 8787 sur Internet. La configuration autorise les fichiers jusqu’à 1 Gio et leur transfert en flux.
+
 Pour développer en local, générer une clé puis lancer (macOS/Linux) :
 
 ```sh

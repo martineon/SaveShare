@@ -1,0 +1,38 @@
+# For an existing nginx reverse proxy; does not start Caddy or bind ports 80/443.
+services:
+  saveshare:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+    image: saveshare-server:local
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8787:8787"
+    environment:
+      SAVESHARE_ADMIN_TOKEN: ${SAVESHARE_ADMIN_TOKEN:?Set SAVESHARE_ADMIN_TOKEN in .env}
+    volumes:
+      - saves:/data
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,noexec,nosuid
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 512m
+    cpus: 0.5
+    pids_limit: 128
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8787/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+volumes:
+  saves:
+    name: saveshare-data
