@@ -5,12 +5,20 @@ const os = require('node:os');
 const path = require('node:path');
 const { createServer } = require('../server/index.cjs');
 const { Client, serverURL } = require('../desktop/client.cjs');
-const { hash, id, atomicJSON } = require('../shared/common.cjs');
+const { hash, id, atomicJSON, manifest } = require('../shared/common.cjs');
+
+async function folderSave(root, n = 1) {
+  const folder = path.join(root, 'Midgard'); await fs.mkdir(folder, { recursive: true });
+  for (const [ext, content] of Object.entries({ db2: `world ${n}`, fwl2: 'seed 42', chunks: `index ${n}`, ok: '' })) await fs.writeFile(path.join(folder, `_main.${n}.${ext}`), content);
+  await fs.writeFile(path.join(folder, '0_0__1_0.chunk'), 'terrain');
+  return folder;
+}
 
 async function fixture(t, options = {}) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'saveshare-test-'));
   const admin = 'test-only-admin-key-with-at-least-32-characters';
-  const server = createServer({ dataDir: path.join(root, 'server'), adminToken: admin, ...options });
+  const { format, ...serverOptions } = options;
+  const server = createServer({ dataDir: path.join(root, 'server'), adminToken: admin, ...serverOptions });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   t.after(async () => { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); await fs.rm(root, { recursive: true, force: true }); });
   const url = `http://127.0.0.1:${server.address().port}`;
@@ -18,6 +26,7 @@ async function fixture(t, options = {}) {
   await fs.mkdir(folderA); await fs.mkdir(folderB);
   await fs.writeFile(path.join(folderA, 'Midgard.db'), 'day one world');
   await fs.writeFile(path.join(folderA, 'Midgard.fwl'), 'seed 42');
+  if (format === 'folder') await folderSave(folderA);
   await fs.writeFile(path.join(folderA, 'AnotherWorld.db'), 'untouched');
   const a = await new Client({ dataDir: path.join(root, 'a') }).init();
   const b = await new Client({ dataDir: path.join(root, 'b') }).init();
@@ -144,4 +153,150 @@ test('late renewal cannot resurrect a released session', async t => {
   await a.finish(wid);
   await assert.rejects(a.api(w, '/lease', 'PUT', { clientId: a.config.clientId, leaseToken }), /Session expirée/);
   assert.equal((await a.info(w)).lease, null);
+});
+
+test('folder world: full snapshot, incremental upload, deleted chunks, restore and handoff', async t => {
+  const { a, b, wid, folderA, folderB } = await fixture(t, { format: 'folder' });
+  await a.start(wid); const first = a.get(wid).base;
+  await b.pull(wid);
+  const target = path.join(folderB, 'Midgard');
+  assert.equal(await fs.readFile(path.join(target, '_main.1.ok'), 'utf8'), '');
+  assert.equal((await fs.readdir(target)).length, 5);
+  const uploads = []; const api = a.api.bind(a);
+  a.api = async (...args) => { if (args[2] === 'PUT' && args[1].startsWith('/blobs/')) uploads.push(args[1]); return api(...args); };
+  await fs.writeFile(path.join(folderA, 'Midgard', '1_1__1_0.chunk'), 'new terrain');
+  await fs.unlink(path.join(folderA, 'Midgard', '0_0__1_0.chunk'));
+  await a.finish(wid);
+  assert.equal(uploads.length, 1, 'unchanged files must not be uploaded again');
+  b.stateFor(b.get(wid)).autoApply = true; await b.tick();
+  await assert.rejects(fs.stat(path.join(target, '0_0__1_0.chunk')), { code: 'ENOENT' });
+  assert.equal(await fs.readFile(path.join(target, '1_1__1_0.chunk'), 'utf8'), 'new terrain');
+  await b.restore(wid, first);
+  await assert.rejects(fs.stat(path.join(target, '1_1__1_0.chunk')), { code: 'ENOENT' });
+  assert.equal(await fs.readFile(path.join(target, '0_0__1_0.chunk'), 'utf8'), 'terrain');
+  await a.pull(wid);
+  assert.equal(await fs.readFile(path.join(folderA, 'AnotherWorld.db'), 'utf8'), 'untouched');
+  assert.equal((await a.info(a.get(wid))).versions.length, 3);
+});
+
+test('conversion keeps old history, prefers new folder over leftover pair and blocks old apps', async t => {
+  const { a, b, wid, folderA, folderB, url } = await fixture(t);
+  await a.start(wid); const first = a.get(wid).base;
+  await b.pull(wid);
+  await folderSave(folderA);
+  await a.finish(wid);
+  const remote = await a.info(a.get(wid));
+  assert.equal(remote.versions[0].format, 'folder'); assert.equal(remote.versions[1].format, 'legacy');
+  const headers = { Authorization: `Bearer ${a.get(wid).key}` };
+  assert.equal((await fetch(`${url}/worlds/${wid}`, { headers })).status, 426);
+  await b.pull(wid);
+  await assert.rejects(fs.stat(path.join(folderB, 'Midgard.db')), { code: 'ENOENT' });
+  assert.equal(await fs.readFile(path.join(b.get(wid).backup, 'Midgard.db'), 'utf8'), 'day one world');
+  await b.restore(wid, first);
+  await assert.rejects(fs.stat(path.join(folderB, 'Midgard')), { code: 'ENOENT' });
+  assert.equal(await fs.readFile(path.join(folderB, 'Midgard.db'), 'utf8'), 'day one world');
+  assert.equal((await fetch(`${url}/worlds/${wid}`, { headers })).status, 426, 'old clients remain blocked after legacy restore');
+});
+
+test('newest folder generation must be complete; malformed paths and duplicate names are rejected', async t => {
+  const { a, wid, folderA } = await fixture(t, { format: 'folder' }); const w = a.get(wid);
+  const good = await a.scan(w);
+  for (const name of ['Midgard/../escape', 'Other/file', 'Midgard/C:evil', 'Midgard/CON.txt', 'Midgard/foo.', 'Midgard/foo\\bar', '/etc/passwd']) {
+    assert.throws(() => manifest([...good, { name, hash: hash('x'), size: 1 }], 'Midgard', 'folder'));
+  }
+  assert.throws(() => manifest([...good, { ...good[0], name: good[0].name.toUpperCase() }], 'Midgard', 'folder'));
+  assert.throws(() => manifest([...good, { name: 'Midgard/_main.1.db2/child', hash: hash('x'), size: 1 }], 'Midgard', 'folder'));
+  assert.throws(() => manifest([...good, ...['Sub/a', 'sub/b'].map(name => ({ name: `Midgard/${name}`, hash: hash('x'), size: 1 }))], 'Midgard', 'folder'), /incompatibles/);
+  await fs.writeFile(path.join(folderA, 'Midgard', '_main.2.fwl2'), 'in progress');
+  await assert.rejects(a.scan(w), /incomplet/);
+  await folderSave(folderA, 2); await a.start(wid); await a.finish(wid);
+});
+
+test('folder dirty files require explicit recovery; even incomplete local snapshots are backed up', async t => {
+  const { a, b, wid, folderB } = await fixture(t, { format: 'folder' });
+  await a.start(wid); await a.finish(wid); await b.pull(wid);
+  const local = path.join(folderB, 'Midgard');
+  await fs.writeFile(path.join(local, '_main.2.db2'), 'offline unfinished save');
+  await assert.rejects(b.pull(wid), /Progression locale différente/);
+  await b.pull(wid, true);
+  assert.equal(await fs.readFile(path.join(b.get(wid).backup, 'Midgard', '_main.2.db2'), 'utf8'), 'offline unfinished save');
+  await assert.rejects(fs.stat(path.join(local, '_main.2.db2')), { code: 'ENOENT' });
+});
+
+test('folder journal rolls back partial replacement after restart and preserves displaced data', async t => {
+  const { a, wid, folderA, root } = await fixture(t, { format: 'folder' });
+  await a.start(wid); await a.finish(wid); const w = a.get(wid);
+  const { inventory, copyRoots } = require('../desktop/snapshots.cjs');
+  const original = await inventory(w, { all: true });
+  const backup = path.join(root, 'recovery'); await fs.mkdir(backup); await copyRoots(w, backup, original.existing);
+  await atomicJSON(a.journal(w), { protocol: 2, backup, existing: original.existing, base: w.base, files: w.files });
+  await fs.rename(path.join(folderA, 'Midgard'), path.join(folderA, '.saveshare-test-displaced'));
+  await fs.unlink(path.join(folderA, 'Midgard.db'));
+  await fs.mkdir(path.join(folderA, 'Midgard')); await fs.writeFile(path.join(folderA, 'Midgard', 'partial.chunk'), 'partial');
+  const restarted = await new Client({ dataDir: path.join(root, 'a') }).init();
+  assert.equal(await fs.readFile(path.join(folderA, 'Midgard', '_main.1.db2'), 'utf8'), 'world 1');
+  assert.equal(await fs.readFile(path.join(folderA, 'Midgard.db'), 'utf8'), 'day one world');
+  await assert.rejects(fs.stat(path.join(folderA, 'Midgard', 'partial.chunk')), { code: 'ENOENT' });
+  assert.equal(restarted.get(wid).base, w.base);
+});
+
+test('folder symlinks, including directory links, are never followed', async t => {
+  const { a, wid, folderA, root } = await fixture(t, { format: 'folder' });
+  const outside = path.join(root, 'private'); await fs.mkdir(outside);
+  const link = path.join(folderA, 'Midgard', 'escape');
+  try { await fs.symlink(outside, link, 'junction'); }
+  catch (e) { if (e.code === 'EPERM' && process.platform === 'win32') return t.skip('Symlinks unavailable'); throw e; }
+  await assert.rejects(a.scan(a.get(wid)), /liens symboliques/);
+  await assert.rejects(a.apply(a.get(wid), { files: [], format: 'folder' }, true));
+});
+
+test('large folder manifests exceed the old 64 KiB limit and keep nested files', async t => {
+  const { a, b, wid, folderA, folderB } = await fixture(t, { format: 'folder' });
+  const folder = path.join(folderA, 'Midgard');
+  for (let i = 0; i < 650; i++) await fs.writeFile(path.join(folder, `${i}_0__1_0.chunk`), 'terrain');
+  await fs.mkdir(path.join(folder, 'nested')); await fs.writeFile(path.join(folder, 'nested', 'extra.dat'), 'mod data');
+  await a.start(wid); await a.finish(wid);
+  assert.ok(JSON.stringify(a.get(wid).files).length > 64 * 1024);
+  await b.pull(wid);
+  assert.equal(await fs.readFile(path.join(folderB, 'Midgard', 'nested', 'extra.dat'), 'utf8'), 'mod data');
+});
+
+test('a failed folder swap rolls back automatically without losing the previous files', async t => {
+  const { a, b, wid, folderA, folderB } = await fixture(t, { format: 'folder' });
+  await a.start(wid); await a.finish(wid); await b.pull(wid);
+  const previous = b.get(wid).base;
+  await a.start(wid); await folderSave(folderA, 2); await a.finish(wid);
+  const rename = fs.rename; let injected = false;
+  fs.rename = async (from, to) => {
+    if (!injected && from.includes('.saveshare-stage-') && to === path.join(b.get(wid).folder, 'Midgard')) { injected = true; throw new Error('injected swap failure'); }
+    return rename(from, to);
+  };
+  try { await assert.rejects(b.pull(wid), /injected swap failure/); }
+  finally { fs.rename = rename; }
+  assert.equal(injected, true); assert.equal(b.get(wid).base, previous);
+  assert.equal(await fs.readFile(path.join(folderB, 'Midgard', '_main.1.db2'), 'utf8'), 'world 1');
+  await assert.rejects(fs.stat(path.join(folderB, 'Midgard', '_main.2.db2')), { code: 'ENOENT' });
+  await b.pull(wid);
+  assert.equal(await fs.readFile(path.join(folderB, 'Midgard', '_main.2.db2'), 'utf8'), 'world 2');
+});
+
+test('folder automatic publication waits for a stable completed generation', async t => {
+  const { a, wid, folderA } = await fixture(t, { format: 'folder' });
+  await a.start(wid); const original = a.get(wid).base;
+  const folder = path.join(folderA, 'Midgard');
+  await fs.writeFile(path.join(folder, '_main.2.db2'), 'unfinished');
+  await a.tick(); assert.equal(a.get(wid).base, original);
+  await folderSave(folderA, 2);
+  const past = new Date(Date.now() - 20_000);
+  for (const name of await fs.readdir(folder)) await fs.utimes(path.join(folder, name), past, past);
+  await fs.utimes(folder, past, past);
+  await a.tick(); assert.notEqual(a.get(wid).base, original);
+});
+
+test('missing converted folder never silently publishes the stale legacy pair', async t => {
+  const { a, wid, folderA } = await fixture(t, { format: 'folder' });
+  await a.start(wid); const original = a.get(wid).base;
+  await fs.rename(path.join(folderA, 'Midgard'), path.join(folderA, 'MovedWorld'));
+  await assert.rejects(a.publish(wid), /dossier du monde a disparu/);
+  assert.equal(a.get(wid).base, original);
 });

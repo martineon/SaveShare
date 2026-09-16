@@ -51,11 +51,12 @@ else {
       });
     });
     handle('choose-folder', async mode => {
+      if (!['create', 'legacy', 'join'].includes(mode)) throw new Error('Sélection invalide.');
       const base = process.platform === 'win32' ? path.join(app.getPath('home'), 'AppData/LocalLow/IronGate/Valheim/worlds_local') : path.join(app.getPath('home'), 'Library/Application Support/IronGate/Valheim/worlds_local');
-      const result = await dialog.showOpenDialog(win, { title: mode === 'create' ? 'Choisir le fichier .fwl du monde Valheim' : 'Choisir le dossier worlds_local de Valheim', defaultPath: base, properties: [mode === 'create' ? 'openFile' : 'openDirectory'], ...(mode === 'create' ? { filters: [{ name: 'Monde Valheim', extensions: ['fwl'] }] } : {}) });
+      const result = await dialog.showOpenDialog(win, { title: mode === 'create' ? 'Choisir le dossier du monde dans worlds_local' : mode === 'legacy' ? 'Ancien format : choisir le fichier .fwl' : 'Choisir le dossier worlds_local de Valheim', defaultPath: base, properties: [mode === 'legacy' ? 'openFile' : 'openDirectory'], ...(mode === 'legacy' ? { filters: [{ name: 'Ancien monde Valheim', extensions: ['fwl'] }] } : {}) });
       if (result.canceled) return null;
-      const chosen = result.filePaths[0]; const folder = mode === 'create' ? path.dirname(chosen) : chosen;
-      selectedFolders.add(folder); return { folder, fileStem: mode === 'create' ? path.basename(chosen, '.fwl') : '' };
+      const chosen = result.filePaths[0]; const folder = mode === 'join' ? chosen : path.dirname(chosen);
+      selectedFolders.add(folder); return { folder, fileStem: mode === 'join' ? '' : path.basename(chosen, mode === 'legacy' ? '.fwl' : undefined), selection: mode };
     });
     handle('add', input => client.exclusive(async () => {
       if (!input || !selectedFolders.has(input.folder)) throw new Error('Sélectionnez le dossier avec le bouton Parcourir.');

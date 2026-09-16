@@ -5,14 +5,14 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { Transform } = require('node:stream');
 const { pipeline } = require('node:stream/promises');
-const { hash, id, fail, isHash, isId, worldName, manifest, atomicJSON, readJSON } = require('../shared/common.cjs');
+const { hash, id, fail, isHash, isId, worldName, manifest, atomicJSON, readJSON, saveFormat } = require('../shared/common.cjs');
 
 const LEASE_MS = 90_000;
 const MAX_BLOB = 1024 ** 3;
 function equalSecret(a, b) { return crypto.timingSafeEqual(Buffer.from(hash(a || '')), Buffer.from(hash(b || ''))); }
-async function jsonBody(req) {
+async function jsonBody(req, limit = 64 * 1024) {
   const chunks = []; let size = 0;
-  for await (const chunk of req) { size += chunk.length; if (size > 64 * 1024) fail('Requête trop volumineuse.', 413); chunks.push(chunk); }
+  for await (const chunk of req) { size += chunk.length; if (size > limit) fail('Requête trop volumineuse.', 413); chunks.push(chunk); }
   try { return JSON.parse(Buffer.concat(chunks).toString()); } catch { fail('JSON invalide.'); }
 }
 function createServer({ dataDir, adminToken, leaseMs = LEASE_MS }) {
@@ -29,20 +29,22 @@ function createServer({ dataDir, adminToken, leaseMs = LEASE_MS }) {
     if (!world.lease || world.lease.expires <= Date.now() || world.lease.clientId !== body.clientId || !equalSecret(world.lease.token, body.leaseToken)) fail('Session expirée ou détenue par un autre joueur. Votre progression locale est conservée.', 409);
   }
   function publicWorld(w) {
-    return { id: w.id, name: w.name, fileStem: w.fileStem, head: w.head, versions: w.versions,
+    return { protocol: 2, id: w.id, name: w.name, fileStem: w.fileStem, head: w.head, versions: w.versions,
       lease: w.lease && w.lease.expires > Date.now() ? { clientId: w.lease.clientId, author: w.lease.author, expires: w.lease.expires } : null };
   }
   const server = http.createServer(async (req, res) => {
     const send = (status, data) => { res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }); res.end(JSON.stringify(data)); };
     try {
       const url = new URL(req.url, 'http://localhost');
-      if (req.method === 'GET' && url.pathname === '/health') return send(200, { ok: true, protocol: 1 });
+      if (req.method === 'GET' && url.pathname === '/health') return send(200, { ok: true, protocol: 2 });
       const token = /^Bearer (.+)$/.exec(req.headers.authorization || '')?.[1] || '';
       if (req.method === 'POST' && url.pathname === '/worlds') {
         if (!equalSecret(token, adminToken)) fail('Clé administrateur incorrecte.', 401);
         const body = await jsonBody(req); const stem = worldName(body.fileStem);
+        const format = saveFormat(body.format);
+        if (format === 'folder' && req.headers['x-saveshare-protocol'] !== '2') fail('Mettez SaveShare à jour pour les dossiers Valheim.', 426);
         const key = crypto.randomBytes(32).toString('base64url');
-        const w = { id: id(), name: String(body.name || stem).slice(0, 80), fileStem: stem, keyHash: hash(key), head: null, versions: [], lease: null };
+        const w = { id: id(), name: String(body.name || stem).slice(0, 80), fileStem: stem, minProtocol: format === 'folder' ? 2 : 1, keyHash: hash(key), head: null, versions: [], lease: null };
         await atomicJSON(worldFile(w.id), w); return send(201, { ...publicWorld(w), key });
       }
       const match = /^\/worlds\/([a-f0-9-]{36})(?:\/(lease|commits|blobs)(?:\/([a-f0-9]{64}))?)?$/.exec(url.pathname);
@@ -50,6 +52,8 @@ function createServer({ dataDir, adminToken, leaseMs = LEASE_MS }) {
       const [, wid, action, digest] = match;
       let w; try { w = await readJSON(worldFile(wid)); } catch (e) { if (e.code === 'ENOENT') fail('Monde introuvable.', 404); throw e; }
       if (!equalSecret(hash(token), w.keyHash)) fail('Invitation incorrecte.', 401);
+      const checkProtocol = world => { if (world.minProtocol >= 2 && req.headers['x-saveshare-protocol'] !== '2') fail('Ce monde utilise les dossiers Valheim. Installez SaveShare 0.3.0 ou supérieur.', 426); };
+      checkProtocol(w);
       if (req.method === 'GET' && !action) return send(200, publicWorld(w));
       if (action === 'blobs' && isHash(digest)) {
         if (req.method === 'GET') {
@@ -72,9 +76,10 @@ function createServer({ dataDir, adminToken, leaseMs = LEASE_MS }) {
           return send(200, { ok: true, size });
         }
       }
-      const body = await jsonBody(req);
+      const body = await jsonBody(req, action === 'commits' ? 20 * 1024 ** 2 : 64 * 1024);
       return await serial(wid, async () => {
         w = await readJSON(worldFile(wid));
+        checkProtocol(w);
         if (action === 'lease' && req.method === 'PUT') {
           if (!isId(body.clientId)) fail('Identifiant client invalide.');
           if (body.leaseToken || (w.lease && w.lease.expires > Date.now())) checkLease(w, body);
@@ -87,12 +92,15 @@ function createServer({ dataDir, adminToken, leaseMs = LEASE_MS }) {
         if (action === 'commits' && req.method === 'POST') {
           checkLease(w, body);
           if (body.parent !== w.head) fail('Le monde a avancé depuis votre dernière synchronisation. Progression locale conservée ; récupérez la nouvelle version avant de reprendre.', 409);
-          const files = manifest(body.files, w.fileStem);
+          const format = saveFormat(body.format);
+          if (format === 'folder' && req.headers['x-saveshare-protocol'] !== '2') fail('Mettez SaveShare à jour pour les dossiers Valheim.', 426);
+          const files = manifest(body.files, w.fileStem, format);
           for (const f of files) {
             const stat = await fs.stat(blobFile(wid, f.hash)).catch(() => null);
             if (!stat || stat.size !== f.size) fail('Sauvegarde incomplète : un fichier manque sur le serveur.');
           }
-          const commit = { id: id(), parent: w.head, createdAt: new Date().toISOString(), author: w.lease.author, message: String(body.message || 'Sauvegarde automatique').slice(0, 200), files };
+          const commit = { id: id(), parent: w.head, createdAt: new Date().toISOString(), author: w.lease.author, message: String(body.message || 'Sauvegarde automatique').slice(0, 200), format, files };
+          if (format === 'folder') w.minProtocol = 2;
           w.head = commit.id; w.versions.unshift(commit); await atomicJSON(worldFile(wid), w);
           return send(201, commit);
         }

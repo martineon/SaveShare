@@ -28,8 +28,9 @@
       <label>Votre pseudo<input id="author" required maxlength="60" placeholder="Votre nom de Viking"></label>
       <div id="create-fields"><label>Serveur SaveShare<input id="server" type="url" placeholder="https://saves.example.fr"></label><label>Clé administrateur du serveur<input id="admin-token" type="password" autocomplete="off" placeholder="Fournie lors de l’installation du serveur"></label><label>Nom du partage<input id="name" maxlength="80" placeholder="Les Vikings du dimanche"></label></div>
       <div id="join-fields" hidden><label>Code d’invitation<textarea id="invite" rows="3" placeholder="saveshare:…" spellcheck="false"></textarea></label></div>
-      <label id="folder-label">Monde Valheim local</label><button type="button" class="folder-picker" id="choose-folder">⌁ <span id="folder-value">Choisir le fichier .fwl du monde</span><span>Parcourir →</span></button>
-      <div class="notice">Dans Valheim, utilisez une sauvegarde <strong>locale</strong> et fermez le jeu. Cette version synchronise uniquement la paire <strong>.db + .fwl</strong> du monde choisi, sans toucher aux personnages ni aux autres mondes.</div>
+      <label id="folder-label">Monde Valheim local</label><button type="button" class="folder-picker" id="choose-folder">⌁ <span id="folder-value">Choisir le dossier du monde dans worlds_local</span><span>Parcourir →</span></button>
+      <button type="button" class="quiet" id="choose-legacy">Ancien format : sélectionner un .fwl</button>
+      <div class="notice">Utilisez une sauvegarde <strong>locale</strong> et fermez Valheim. Sélectionnez le <strong>dossier portant le nom du monde</strong> : tous ses fichiers et blocs seront partagés. L’ancien format .db + .fwl reste compatible. Les personnages et les autres mondes ne sont pas synchronisés.</div>
       <p id="form-error" class="error-text" role="alert"></p>
       <button class="primary full" id="submit-world">Créer le partage <span>→</span></button>
     </form>

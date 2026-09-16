@@ -5,7 +5,8 @@ const os = require('node:os');
 const crypto = require('node:crypto');
 const { Readable, Transform } = require('node:stream');
 const { pipeline } = require('node:stream/promises');
-const { hash, id, fail, isId, worldName, manifest, atomicJSON, readJSON, sameFiles } = require('../shared/common.cjs');
+const { hash, id, fail, isId, worldName, manifest, atomicJSON, readJSON, sameFiles, saveFormat } = require('../shared/common.cjs');
+const { inventory, unchanged, copyRoots, stageFiles, replaceRoots, recoverSnapshot } = require('./snapshots.cjs');
 
 function serverURL(raw) {
   let url; try { url = new URL(raw); } catch { fail('Adresse du serveur invalide.'); }
@@ -53,7 +54,7 @@ class Client {
   get(wid) { return this.config.worlds.find(w => w.id === wid) || fail('Monde non configuré.'); }
   async api(w, route = '', method = 'GET', body, headers = {}) {
     const res = await fetch(`${w.server}/worlds${w.id ? '/' + w.id : ''}${route}`, {
-      method, headers: { Authorization: `Bearer ${w.key}`, ...(body && typeof body.pipe !== 'function' ? { 'Content-Type': 'application/json' } : {}), ...headers },
+      method, headers: { Authorization: `Bearer ${w.key}`, 'x-saveshare-protocol': '2', ...(body && typeof body.pipe !== 'function' ? { 'Content-Type': 'application/json' } : {}), ...headers },
       body: body === undefined ? undefined : typeof body.pipe === 'function' ? body : JSON.stringify(body),
       ...(body && typeof body.pipe === 'function' ? { duplex: 'half' } : {}),
       signal: AbortSignal.timeout(10 * 60_000), redirect: 'error'
@@ -64,7 +65,7 @@ class Client {
   async info(w) {
     const remote = await (await this.api(w)).json();
     if (remote.id !== w.id || remote.fileStem !== w.fileStem || !Array.isArray(remote.versions)) fail('Réponse du serveur invalide.');
-    for (const v of remote.versions) { if (!isId(v.id)) fail('Version invalide.'); v.files = manifest(v.files, w.fileStem); }
+    for (const v of remote.versions) { if (!isId(v.id)) fail('Version invalide.'); v.format = saveFormat(v.format); v.files = manifest(v.files, w.fileStem, v.format); }
     if (remote.head && remote.versions[0]?.id !== remote.head) fail('Historique du serveur incohérent.');
     this.stateFor(w).remote = remote; return remote;
   }
@@ -85,24 +86,26 @@ class Client {
       w = { ...target, name: remote.name, fileStem: worldName(remote.fileStem), folder, base: null, files: null };
     } else {
       worldName(fileStem);
-      if (this.config.worlds.some(x => x.folder.toLowerCase() === folder.toLowerCase() && x.fileStem.toLowerCase() === fileStem.toLowerCase())) fail('Cette paire de fichiers est déjà configurée.');
+      if (this.config.worlds.some(x => x.folder.toLowerCase() === folder.toLowerCase() && x.fileStem.toLowerCase() === fileStem.toLowerCase())) fail('Ce monde local est déjà configuré.');
       const candidate = { folder, fileStem };
-      await this.scan(candidate); // Verify both files before creating the remote world.
-      const remote = await (await this.api({ server: serverURL(server), key: adminToken }, '', 'POST', { name, fileStem })).json();
+      const files = await this.scan(candidate);
+      const format = files.some(f => f.name.includes('/')) ? 'folder' : 'legacy';
+      if (format === 'folder') {
+        const health = await fetch(`${serverURL(server)}/health`, { signal: AbortSignal.timeout(10_000), redirect: 'error' });
+        if (!health.ok || (await health.json()).protocol !== 2) fail('Mettez le serveur SaveShare à jour pour les dossiers Valheim.');
+      }
+      const remote = await (await this.api({ server: serverURL(server), key: adminToken }, '', 'POST', { name, fileStem, format })).json();
       w = { server: serverURL(server), id: remote.id, key: remote.key, name: remote.name, fileStem, folder, base: null, files: null };
     }
-    if (this.config.worlds.some(x => x.id === w.id || (x.folder.toLowerCase() === folder.toLowerCase() && x.fileStem.toLowerCase() === w.fileStem.toLowerCase()))) fail('Ce monde ou cette paire de fichiers est déjà configuré.');
+    if (this.config.worlds.some(x => x.id === w.id || (x.folder.toLowerCase() === folder.toLowerCase() && x.fileStem.toLowerCase() === w.fileStem.toLowerCase()))) fail('Ce monde est déjà configuré.');
     this.config.worlds.push(w); await this.save(); await this.info(w); return w.id;
   }
   invitation(wid) { const w = this.get(wid); return 'saveshare:' + Buffer.from(JSON.stringify({ server: w.server, id: w.id, key: w.key })).toString('base64url'); }
   async scan(w, { allowMissing = false, capture = false, quiet = false } = {}) {
-    const files = [], before = [];
-    for (const name of [`${w.fileStem}.db`, `${w.fileStem}.fwl`]) {
-      const filename = path.join(w.folder, name), stat = await plainFile(filename);
-      if (!stat) { if (allowMissing) continue; fail(`Fichier manquant : ${name}. Utilisez une sauvegarde locale Valheim avec sa paire .db / .fwl.`); }
-      if (stat.size < 1 || stat.size > 1024 ** 3) fail(`${name} est vide ou dépasse la limite de 1 Gio.`);
-      if (quiet && Date.now() - stat.mtimeMs < 10_000) fail('Valheim écrit encore sa sauvegarde. Nouvelle tentative au prochain passage.');
-      before.push({ filename, size: stat.size, mtimeMs: stat.mtimeMs, ctimeMs: stat.ctimeMs });
+    const files = [], before = await inventory(w);
+    if (quiet && before.entries.some(s => Date.now() - s.mtimeMs < 10_000)) fail('Valheim écrit encore sa sauvegarde. Nouvelle tentative au prochain passage.');
+    for (const stat of before.entries.filter(s => !s.directory)) {
+      const name = stat.name, filename = path.join(w.folder, name);
       if (capture) {
         await fs.mkdir(path.join(this.dir, 'cache'), { recursive: true });
         const temp = path.join(this.dir, 'cache', `${id()}.tmp`);
@@ -113,8 +116,8 @@ class Client {
         } finally { await fs.rm(temp, { force: true }); }
       } else files.push({ name, size: stat.size, hash: await fileHash(filename) });
     }
-    for (const b of before) { const after = await plainFile(b.filename); if (!after || after.size !== b.size || after.mtimeMs !== b.mtimeMs || after.ctimeMs !== b.ctimeMs) fail('Sauvegarde modifiée pendant la lecture. Réessayez après la sauvegarde du jeu.'); }
-    return files;
+    if (!unchanged(before, await inventory(w))) fail('Sauvegarde modifiée pendant la lecture. Réessayez après la sauvegarde du jeu.');
+    return allowMissing ? files : manifest(files, w.fileStem, before.format);
   }
   async cache(w, version) {
     if (!version) return;
@@ -135,6 +138,11 @@ class Client {
     const j = await readJSON(this.journal(w)).catch(e => { if (e.code === 'ENOENT') return null; throw e; });
     if (!j) return;
     if (await this.isGameRunning()) fail('Une restauration interrompue doit être récupérée. Fermez Valheim puis redémarrez SaveShare.');
+    if (j.protocol === 2) {
+      await recoverSnapshot(w, j);
+      w.base = j.base; w.files = j.files; w.backup = j.backup; await this.save();
+      await fs.rm(this.journal(w)); return;
+    }
     for (const name of [`${w.fileStem}.db`, `${w.fileStem}.fwl`]) {
       const dest = path.join(w.folder, name); await plainFile(dest);
       if (j.existing.includes(name)) {
@@ -148,9 +156,11 @@ class Client {
   async apply(w, version, force = false) {
     if (await this.isGameRunning()) fail('Fermez Valheim et son serveur dédié avant de remplacer les fichiers.');
     await this.recover(w);
+    version = { ...version, files: manifest(version.files, w.fileStem, version.format) };
     const before = await this.scan(w, { allowMissing: true });
     if (!force && before.length && !sameFiles(before, w.files)) fail('Progression locale différente. Utilisez « Récupérer » pour la sauvegarder à part et appliquer la version partagée.', 409);
     await this.cache(w, version);
+    if (version.format === 'folder' || (await inventory(w)).format === 'folder') return this.applySnapshot(w, version, before);
     const backup = path.join(this.dir, 'backups', `${Date.now()}-${id()}`);
     await fs.mkdir(backup, { recursive: true });
     for (const f of before) await fs.copyFile(path.join(w.folder, f.name), path.join(backup, f.name));
@@ -165,6 +175,27 @@ class Client {
       w.base = version.id; w.files = version.files; w.backup = backup; await this.save();
       await fs.rm(this.journal(w));
     } catch (e) { await this.recover(w); throw e; }
+  }
+  async applySnapshot(w, version, before) {
+    const all = await inventory(w, { all: true });
+    const backup = path.join(this.dir, 'backups', `${Date.now()}-${id()}`);
+    await fs.mkdir(backup, { recursive: true });
+    await copyRoots(w, backup, all.existing);
+    const stage = await stageFiles(w, version.files, path.join(this.dir, 'cache'));
+    const displaced = await fs.mkdtemp(path.join(w.folder, '.saveshare-previous-'));
+    let completed = false;
+    try {
+      if (!unchanged(all, await inventory(w, { all: true })) || !sameFiles(before, await this.scan(w, { allowMissing: true })) || await this.isGameRunning()) fail('Les fichiers ou le jeu ont changé pendant la préparation. Réessayez jeu fermé.');
+      await atomicJSON(this.journal(w), { protocol: 2, backup, existing: all.existing, base: w.base, files: w.files });
+      try {
+        await replaceRoots(w, stage, displaced);
+        w.base = version.id; w.files = version.files; w.backup = backup; await this.save();
+        await fs.rm(this.journal(w)); completed = true;
+      } catch (e) { await this.recover(w); throw e; }
+    } finally {
+      await fs.rm(stage, { recursive: true, force: true });
+      if (completed) await fs.rm(displaced, { recursive: true, force: true });
+    }
   }
   async start(wid) {
     const w = this.get(wid), r = this.stateFor(w);
@@ -191,9 +222,17 @@ class Client {
     if (!r.session) fail('Prenez la session avant de publier.');
     if (sameFiles(await this.scan(w, { quiet }), w.files)) return;
     const files = await this.scan(w, { capture: true, quiet });
+    const format = files.some(f => f.name.includes('/')) ? 'folder' : 'legacy';
+    if (format === 'legacy' && w.files?.some(f => f.name.includes('/'))) fail('Le dossier du monde a disparu. Les anciens fichiers ne seront pas republiés : récupérez le monde ou restaurez une version depuis l’historique.');
+    if (format === 'folder' && (await this.info(w)).protocol !== 2) fail('Mettez le serveur SaveShare à jour pour les dossiers Valheim.');
     const leaseToken = r.session.token;
-    for (const f of files) await this.api(w, `/blobs/${f.hash}`, 'PUT', createReadStream(path.join(this.dir, 'cache', f.hash)), { 'x-client-id': this.config.clientId, 'x-lease-token': leaseToken });
-    const commit = await (await this.api(w, '/commits', 'POST', { clientId: this.config.clientId, leaseToken, parent: w.base, files, message })).json();
+    const uploaded = new Set((w.files || []).map(f => f.hash));
+    for (const f of files) {
+      if (uploaded.has(f.hash)) continue;
+      await this.api(w, `/blobs/${f.hash}`, 'PUT', createReadStream(path.join(this.dir, 'cache', f.hash)), { 'x-client-id': this.config.clientId, 'x-lease-token': leaseToken });
+      uploaded.add(f.hash);
+    }
+    const commit = await (await this.api(w, '/commits', 'POST', { clientId: this.config.clientId, leaseToken, parent: w.base, files, format, message })).json();
     w.base = commit.id; w.files = files; await this.save(); await this.info(w); r.error = null; r.status = 'Sauvegarde partagée';
   }
   async finish(wid) {
@@ -217,7 +256,7 @@ class Client {
       const remote = await this.info(w), version = remote.versions.find(v => v.id === versionId);
       if (!version) fail('Version introuvable.');
       await this.cache(w, version);
-      const commit = await (await this.api(w, '/commits', 'POST', { clientId: this.config.clientId, leaseToken: r.session.token, parent: w.base, files: version.files, message: `Restauration de ${versionId.slice(0, 8)}` })).json();
+      const commit = await (await this.api(w, '/commits', 'POST', { clientId: this.config.clientId, leaseToken: r.session.token, parent: w.base, files: version.files, format: version.format, message: `Restauration de ${versionId.slice(0, 8)}` })).json();
       await this.apply(w, commit, true); await this.info(w); r.status = 'Version restaurée et partagée';
     } finally { await this.release(w); }
   }
