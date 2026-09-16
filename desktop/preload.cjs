@@ -5,5 +5,8 @@ contextBridge.exposeInMainWorld('saveShare', {
   add: input => ipcRenderer.invoke('add', input),
   action: (world, action, version) => ipcRenderer.invoke('action', world, action, version),
   refresh: () => ipcRenderer.invoke('refresh'),
+  checkUpdates: () => ipcRenderer.invoke('check-updates'),
+  openUpdate: () => ipcRenderer.invoke('open-update'),
+  installUpdate: () => ipcRenderer.invoke('install-update'),
   onState: callback => { ipcRenderer.on('state', (_event, state) => callback(state)); }
 });

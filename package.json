@@ -1,10 +1,14 @@
 {
   "name": "saveshare",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Vos mondes Valheim, toujours entre de bonnes mains.",
   "author": "SaveShare",
   "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/martineon/SaveShare.git"
+  },
   "main": "desktop/main.cjs",
   "scripts": {
     "start": "electron .",
@@ -17,11 +21,21 @@
   "devDependencies": {
     "@playwright/test": "^1.63.0",
     "electron": "44.4.1",
-    "electron-builder": "26.15.3"
+    "electron-builder": "26.15.3",
+    "js-yaml": "4.3.2"
   },
   "build": {
     "appId": "app.saveshare.desktop",
     "productName": "SaveShare",
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "martineon",
+        "repo": "SaveShare",
+        "releaseType": "release"
+      }
+    ],
     "files": [
       "desktop/**/*",
       "shared/**/*",
@@ -33,7 +47,8 @@
         "dmg",
         "zip"
       ],
-      "category": "public.app-category.games"
+      "category": "public.app-category.games",
+      "identity": null
     },
     "win": {
       "target": [
@@ -47,5 +62,9 @@
     "directories": {
       "output": "dist"
     }
+  },
+  "dependencies": {
+    "electron-updater": "6.8.9",
+    "semver": "7.7.4"
   }
 }

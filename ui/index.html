@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; frame-src 'none'">
-  <title>SaveShare</title><link rel="stylesheet" href="style.css">
+  <title>SaveShare</title><link rel="stylesheet" href="style.css"><link rel="stylesheet" href="updates.css">
 </head>
 <body>
   <div class="titlebar"></div>
@@ -13,12 +13,13 @@
     <button class="nav active" id="worlds-nav"><span>▦</span> Mes mondes <span id="count" class="count">0</span></button>
     <div class="world-list" id="world-list"></div>
     <button class="nav add-nav" id="add-nav"><span>＋</span> Ajouter un monde</button>
+    <div class="update-panel" aria-live="polite"><span id="app-version">SaveShare</span><p id="update-status">Mises à jour de l’application</p><button id="check-updates" class="quiet">Vérifier les mises à jour</button><button id="apply-update" class="primary" hidden></button></div>
     <div class="sidebar-bottom"><span class="avatar" id="avatar">V</span><div id="profile">Viking<small>Sur cet ordinateur</small></div><span class="online-dot"></span></div>
   </aside>
   <main>
     <header><div class="breadcrumb">Mon espace <span>/</span> Mes mondes</div><button class="quiet" id="refresh">↻ <span>Actualiser</span></button></header>
     <section id="content"></section>
-    <footer><span><i class="online-dot"></i> SaveShare · aperçu 0.1</span><span>Un monde partagé. Toutes vos aventures.</span></footer>
+    <footer><span><i class="online-dot"></i> <span id="footer-version">SaveShare</span></span><span>Un monde partagé. Toutes vos aventures.</span></footer>
   </main>
   <dialog id="setup">
     <form id="setup-form">
@@ -35,5 +36,6 @@
   </dialog>
   <div id="toast" role="status" hidden></div>
   <script src="app.js"></script>
+  <script src="updates.js"></script>
 </body>
 </html>

@@ -4,7 +4,7 @@
 
 SaveShare est une application Windows et macOS qui partage vos sauvegardes entre amis et conserve leur historique. Vous jouez ensemble ou en solo sur le PC de l’un des membres, puis le prochain hôte reprend le monde à jour. Un serveur SaveShare central stocke les versions ; la partie Valheim reste hébergée par un joueur.
 
-[Télécharger v0.1.0](https://github.com/martineon/SaveShare/releases/tag/v0.1.0) · [Installer le serveur](#installer-le-serveur-sur-internet) · [Utilisation entre amis](#utilisation-entre-amis)
+[Télécharger la dernière version](https://github.com/martineon/SaveShare/releases/latest) · [Installer le serveur](#installer-le-serveur-sur-internet) · [Utilisation entre amis](#utilisation-entre-amis)
 
 ![Interface SaveShare : monde Valheim partagé, état de synchronisation et historique avec restauration des sauvegardes.](docs/screenshots/saveshare-world.png)
 
@@ -20,15 +20,24 @@ SaveShare est une application Windows et macOS qui partage vos sauvegardes entre
 
 ## Télécharger
 
-| Système | Installateur v0.1.0 |
+| Système | Installateur v0.2.0 |
 | --- | --- |
-| Windows x64 | [SaveShare pour Windows (.exe)](https://github.com/martineon/SaveShare/releases/download/v0.1.0/SaveShare-0.1.0-Windows-x64.exe) |
-| Mac Apple Silicon — M1, M2, M3… | [SaveShare pour Mac ARM64 (.dmg)](https://github.com/martineon/SaveShare/releases/download/v0.1.0/SaveShare-0.1.0-macOS-arm64.dmg) |
-| Mac Intel | [SaveShare pour Mac Intel (.dmg)](https://github.com/martineon/SaveShare/releases/download/v0.1.0/SaveShare-0.1.0-macOS-x64.dmg) |
+| Windows x64 | [SaveShare pour Windows (.exe)](https://github.com/martineon/SaveShare/releases/download/v0.2.0/SaveShare-0.2.0-win-x64.exe) |
+| Mac Apple Silicon — M1, M2, M3… | [SaveShare pour Mac ARM64 (.dmg)](https://github.com/martineon/SaveShare/releases/download/v0.2.0/SaveShare-0.2.0-mac-arm64.dmg) |
+| Mac Intel | [SaveShare pour Mac Intel (.dmg)](https://github.com/martineon/SaveShare/releases/download/v0.2.0/SaveShare-0.2.0-mac-x64.dmg) |
 
-Les installateurs sont disponibles dans les [releases GitHub](https://github.com/martineon/SaveShare/releases), avec leurs [empreintes SHA-256](https://github.com/martineon/SaveShare/releases/download/v0.1.0/SHA256SUMS.txt). Node.js n’est pas nécessaire pour utiliser l’application installée. Les exécutables de cette préversion ne sont pas signés/notariés ; Windows ou macOS peut afficher un avertissement ou en bloquer l’ouverture.
+Les installateurs sont disponibles dans les [releases GitHub](https://github.com/martineon/SaveShare/releases), avec leurs [empreintes SHA-256](https://github.com/martineon/SaveShare/releases/download/v0.2.0/SHA256SUMS.txt). Node.js n’est pas nécessaire pour utiliser l’application installée. Les exécutables ne sont pas signés/notariés ; Windows ou macOS peut afficher un avertissement ou en bloquer l’ouverture.
 
 **Première version fonctionnelle, à essayer avec une copie de monde.** Elle prend en charge les sauvegardes locales composées de `<monde>.db` et `<monde>.fwl`. Les sauvegardes en dossiers/chunks, les personnages, les mods et les autres jeux ne sont pas pris en charge. Aucun serveur public n’est fourni avec le projet.
+
+## Mises à jour de l’application
+
+À partir de **0.2.0**, SaveShare vérifie GitHub dix secondes après le lancement, puis toutes les six heures. Le bouton de la barre latérale permet aussi une vérification manuelle. Seules les releases publiées sans marqueur « pre-release » sont suivies ; aucun retour automatique vers une ancienne version n’est effectué.
+
+- **Windows** : téléchargement automatique, contrôle d’intégrité, puis bouton **Redémarrer et installer**. L’installation attend que la session soit terminée, la synchronisation au repos et Valheim fermé. Une fermeture ordinaire de SaveShare ne lance pas l’installation.
+- **Mac** : détection des nouvelles versions et bouton **Ouvrir le téléchargement**, puis remplacement manuel de l’application. L’installation automatique macOS exige une signature de distribution Apple, qui n’est pas configurée pour ce projet.
+
+**Depuis 0.1.0, installez 0.2.0 manuellement une première fois.** Les mondes connectés, les clés et les copies de secours sont conservés dans le dossier de données utilisateur. Aucune clé d’administration du serveur ni aucun token GitHub n’est nécessaire pour télécharger les mises à jour. Le mode développement (`npm start`) ne contacte pas le serveur de mises à jour.
 
 ## Lancer depuis les sources
 
@@ -49,6 +58,10 @@ npm run dist:win
 ```
 
 Les fichiers sont générés dans `dist/`. Le workflow GitHub Actions teste et compile sur Windows et macOS. Les builds locaux/CI sont non signés tant que des certificats ne sont pas configurés ; ils ne constituent pas une distribution publique signée/notariée. Architecture par défaut : celle de la machine de compilation. Pour Mac Intel : `npx electron-builder --mac --x64 --publish never` ; pour Apple Silicon : `--arm64`.
+
+### Publier une nouvelle version
+
+Mettre à jour `version` dans `package.json` et le lockfile, ajouter `docs/releases/vX.Y.Z.md`, puis pousser le code et un tag `vX.Y.Z` correspondant. Le workflow compile Windows x64 et les deux architectures Mac, vérifie les empreintes des installateurs référencés dans `latest.yml` et `latest-mac.yml`, puis publie la release après l’envoi de tous les fichiers. Les `.zip`, `.blockmap` et métadonnées `.yml` doivent rester dans la release et conserver leurs noms d’origine : ils servent au mécanisme de mise à jour. Une release déjà publiée n’est pas écrasée.
 
 ## Installer le serveur sur Internet
 
